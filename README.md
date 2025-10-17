@@ -1,50 +1,134 @@
-# Welcome to your Expo app 👋
+# FlowChat App �💬
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Um aplicativo de chat em tempo real desenvolvido com React Native (Expo) e Node.js, oferecendo mensagens globais e conversas privadas.
 
-## Get started
+## 🚀 Funcionalidades
 
-1. Install dependencies
+- **Autenticação**: Registro e login de usuários
+- **Chat Global**: Mensagens em tempo real para todos os usuários
+- **Conversas Privadas**: Mensagens 1-para-1 entre usuários específicos
+- **Busca de Usuários**: Encontre outros usuários para iniciar conversas
+- **Interface Moderna**: UI responsiva com animações suaves
+- **Perfil de Usuário**: Modal de perfil com configurações
 
-   ```bash
-   npm install
-   ```
+## 🛠️ Tecnologias Utilizadas
 
-2. Start the app
+### Frontend
+- **React Native** com **Expo**
+- **WebSocket** para mensagens em tempo real
+- **AsyncStorage** para persistência local
+- **React Navigation** para navegação
 
-   ```bash
-   npx expo start
-   ```
+### Backend
+- **Node.js** com **Express**
+- **SQLite** para banco de dados
+- **WebSocket** (ws) para comunicação em tempo real
+- **bcryptjs** para hash de senhas
+- **CORS** para requisições cross-origin
 
-In the output, you'll find options to open the app in a
+## 📦 Instalação e Execução
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Pré-requisitos
+- Node.js (versão 16 ou superior)
+- npm ou yarn
+- Expo CLI
+- Dispositivo físico ou emulador para testar
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### Backend
 
 ```bash
-npm run reset-project
+cd chat-backend
+npm install
+npm start
+# ou
+node server.js
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+O servidor será executado na porta 8080.
 
-## Learn more
+### Frontend
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm install
+npx expo start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Escaneie o QR code com o app Expo Go no seu dispositivo.
 
-## Join the community
+## 🗄️ Estrutura do Banco de Dados
 
-Join our community of developers creating universal apps.
+### Tabela `users`
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Tabela `messages`
+```sql
+CREATE TABLE messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender TEXT NOT NULL,
+  recipient TEXT, -- NULL para mensagens globais
+  text TEXT NOT NULL,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## 🔧 Scripts Disponíveis
+
+### Backend
+- `npm start` ou `node server.js` - Inicia o servidor
+
+### Frontend
+- `npx expo start` - Inicia o servidor de desenvolvimento Expo
+- `npx expo run:android` - Build para Android
+- `npx expo run:ios` - Build para iOS
+
+## 🌐 API Endpoints
+
+### Autenticação
+- `POST /register` - Registrar novo usuário
+- `POST /login` - Fazer login
+
+### Mensagens
+- `GET /messages?user=<username>&conversation=<recipient>` - Buscar mensagens
+- `GET /users/search?q=<query>` - Buscar usuários
+
+### WebSocket
+- Conecta em `ws://localhost:8080`
+- Eventos: `auth`, `message`
+
+## 📱 Como Usar
+
+1. **Registro**: Crie uma conta com username e senha
+2. **Login**: Faça login na sua conta
+3. **Chat Global**: Envie mensagens que todos podem ver
+4. **Conversas Privadas**:
+   - Clique no ícone 🔍 para buscar usuários
+   - Selecione um usuário para iniciar conversa privada
+   - Mensagens privadas aparecem apenas para vocês dois
+5. **Perfil**: Clique no avatar para acessar configurações
+
+## 🤝 Contribuição
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+
+## 👨‍💻 Autor
+
+**Seu Nome** - [Seu GitHub](https://github.com/seu-usuario)
+
+---
+
+⭐ Se este projeto foi útil para você, dê uma estrela!

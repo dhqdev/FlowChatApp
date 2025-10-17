@@ -3,6 +3,14 @@
 # dependencies
 node_modules/
 
+# Backend dependencies
+chat-backend/node_modules/
+
+# Database
+chat-backend/*.db
+chat-backend/*.sqlite
+chat-backend/*.sqlite3
+
 # Expo
 .expo/
 dist/
@@ -26,6 +34,10 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# Logs
+logs
+*.log
+
 # macOS
 .DS_Store
 *.pem
@@ -41,3 +53,14 @@ app-example
 # generated native folders
 /ios
 /android
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
