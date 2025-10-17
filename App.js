@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-const WEBSOCKET_URL = 'wss://ws.postman-echo.com/raw';
+const WEBSOCKET_URL = 'ws://192.168.101.251:8080';
 
 export default function App() {
   const [inputText, setInputText] = useState('');
