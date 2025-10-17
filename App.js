@@ -1,7 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Menu from './Menu';
 
 const API_URL = 'http://192.168.101.251:8080';
 const WEBSOCKET_URL = 'ws://192.168.101.251:8080';
@@ -19,7 +21,40 @@ export default function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null); // null = chat global, string = username da conversa privada
 
-  const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchResultsOpacity] = useState(new Animated.Value(0));
+
+  // Menu lateral
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuSlideAnim] = useState(new Animated.Value(-300)); // Menu começa fora da tela
+  const [conversations, setConversations] = useState([]); // conversas recentes (usernames)
+
+  // Registration mode
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+
+  // Load conversations from storage when logged in
+  useEffect(() => {
+    if (isLoggedIn && username) {
+      const loadConversations = async () => {
+        try {
+          const stored = await AsyncStorage.getItem(`conversations_${username}`);
+          if (stored) {
+            setConversations(JSON.parse(stored));
+          }
+        } catch (error) {
+          console.error('Erro ao carregar conversas:', error);
+        }
+      };
+      loadConversations();
+    }
+  }, [isLoggedIn, username]);
+
+  // Save conversations to storage whenever they change
+  useEffect(() => {
+    if (isLoggedIn && username) {
+      AsyncStorage.setItem(`conversations_${username}`, JSON.stringify(conversations)).catch(console.error);
+    }
+  }, [conversations, isLoggedIn, username]);
 
   const ws = useRef(null);
   const scrollViewRef = useRef();
@@ -204,6 +239,11 @@ export default function App() {
         })
       );
       setInputText('');
+
+      // Se for conversa privada, garantir que ela esteja nas conversas recentes
+      if (currentConversation) {
+        setConversations((prev) => (prev.includes(currentConversation) ? prev : [currentConversation, ...prev]));
+      }
     }
   };
 
@@ -214,10 +254,13 @@ export default function App() {
 
   const handleLogout = () => {
     if (ws.current) ws.current.close();
+    // Clear conversations from storage
+    AsyncStorage.removeItem(`conversations_${username}`).catch(console.error);
     setIsLoggedIn(false);
     setUsername('');
     setMessages([]);
     setCurrentConversation(null);
+    setConversations([]);
   };
 
   const handleSearch = async (query) => {
@@ -258,14 +301,61 @@ export default function App() {
     }
   };
 
-  const startConversation = async (targetUser) => {
-    setCurrentConversation(targetUser);
-    setSearchQuery('');
-    setSearchResults([]);
+  const handleSearchInput = (text) => {
+    setSearchQuery(text);
+    handleSearch(text);
     
-    // Recarregar mensagens será feito pelo useEffect
-    
-    Alert.alert('Conversa iniciada', `Conversando com ${targetUser}`);
+    // Animar resultados
+    if (text.length >= 2 && searchResults.length > 0) {
+      Animated.timing(searchResultsOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(searchResultsOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Funções do menu lateral
+  const toggleMenu = () => {
+    // fechar teclado ao abrir/fechar menu para evitar que o teclado fique por cima
+    Keyboard.dismiss();
+    if (isMenuOpen) {
+      // Clearing search when closing menu
+      setSearchQuery('');
+      setSearchResults([]);
+      setIsSearchActive(false);
+    }
+    const toValue = isMenuOpen ? -300 : 0;
+    setIsMenuOpen(!isMenuOpen);
+
+    Animated.timing(menuSlideAnim, {
+      toValue,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeMenu = () => {
+    if (isMenuOpen) {
+      setIsMenuOpen(false);
+      Animated.timing(menuSlideAnim, {
+        toValue: -300,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Inicia (ou foca) uma conversa privada. Adiciona à lista de conversas se não existir
+  const startConversation = (user) => {
+    setCurrentConversation(user);
+    setConversations((prev) => (prev.includes(user) ? prev : [user, ...prev]));
   };
 
   // Componente para mensagem animada
@@ -317,7 +407,7 @@ export default function App() {
         <SafeAreaView style={styles.container}>
           <StatusBar style="light" translucent backgroundColor="transparent" />
           <View style={styles.loginContainer}>
-            <Text style={styles.title}>FlowChat</Text>
+            <Text style={styles.title}>{isRegisterMode ? 'Registrar' : 'FlowChat'}</Text>
             
             <TextInput
               style={styles.input}
@@ -338,23 +428,23 @@ export default function App() {
 
             <TouchableOpacity 
               style={styles.button} 
-              onPress={handleLogin}
+              onPress={isRegisterMode ? handleRegister : handleLogin}
               disabled={isLoading}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? 'Carregando...' : 'Login'}
+                {isLoading ? 'Carregando...' : (isRegisterMode ? 'Registrar' : 'Login')}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.button, styles.registerButton]} 
-              onPress={handleRegister}
-              disabled={isLoading}
-            >
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Carregando...' : 'Registrar'}
-              </Text>
-            </TouchableOpacity>
+            {isRegisterMode ? (
+              <TouchableOpacity onPress={() => setIsRegisterMode(false)}>
+                <Text style={styles.switchText}>Já tem conta? Login</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => setIsRegisterMode(true)}>
+                <Text style={styles.switchText}>Não tem conta? Registrar</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </SafeAreaView>
       </SafeAreaProvider>
@@ -368,75 +458,121 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <StatusBar style="light" translucent backgroundColor="transparent" />
         
-        <View style={styles.header}>
-          <View style={styles.conversationInfo}>
-            {currentConversation ? (
-              <TouchableOpacity onPress={backToGlobalChat} style={styles.backButton}>
-                <Text style={styles.backButtonText}>←</Text>
-              </TouchableOpacity>
-            ) : null}
-            <Text style={styles.conversationTitle}>
+        {/* Menu Lateral */}
+        <Menu
+          isMenuOpen={isMenuOpen}
+          menuSlideAnim={menuSlideAnim}
+          conversations={conversations}
+          currentConversation={currentConversation}
+          username={username}
+          searchQuery={searchQuery}
+          searchResults={searchResults}
+          isSearchActive={isSearchActive}
+          searchResultsOpacity={searchResultsOpacity}
+          toggleMenu={toggleMenu}
+          closeMenu={closeMenu}
+          startConversation={startConversation}
+          handleSearch={handleSearch}
+          handleSearchInput={handleSearchInput}
+          setIsProfileModalVisible={setIsProfileModalVisible}
+          handleLogout={handleLogout}
+          setIsSearchActive={setIsSearchActive}
+          setSearchResults={setSearchResults}
+          setSearchQuery={setSearchQuery}
+          setCurrentConversation={setCurrentConversation}
+        />
+
+        {/* Overlay quando menu está aberto */}
+        {isMenuOpen && (
+          <TouchableOpacity 
+            style={styles.menuOverlay}
+            activeOpacity={1}
+            onPress={closeMenu}
+          />
+        )}
+
+        {/* Área Principal - Conversa */}
+        <View style={styles.mainContent}>
+          {/* Header com barrinha animada */}
+          <View style={styles.mainHeader}>
+            <TouchableOpacity 
+              style={styles.menuToggleButton}
+              onPress={toggleMenu}
+            >
+              <Animated.View style={[
+                styles.menuToggleBar,
+                {
+                  transform: [{
+                    rotate: menuSlideAnim.interpolate({
+                      inputRange: [-300, 0],
+                      outputRange: ['0deg', '45deg']
+                    })
+                  }]
+                }
+              ]} />
+              <Animated.View style={[
+                styles.menuToggleBar,
+                {
+                  transform: [{
+                    rotate: menuSlideAnim.interpolate({
+                      inputRange: [-300, 0],
+                      outputRange: ['0deg', '-45deg']
+                    })
+                  }]
+                }
+              ]} />
+            </TouchableOpacity>
+
+            <Text style={styles.mainConversationTitle}>
               {currentConversation ? `Conversa com ${currentConversation}` : 'Chat Global'}
             </Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={styles.searchButton}
-              onPress={() => setIsSearchModalVisible(true)}
-            >
-              <Text style={styles.searchButtonText}>🔍</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.profileButton}
-              onPress={() => setIsProfileModalVisible(true)}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {username.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <Text style={styles.logoutButtonText}>Sair</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            contentContainerStyle={styles.chatContainer}
-            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
+            {currentConversation && (
+              <TouchableOpacity onPress={backToGlobalChat} style={styles.mainBackButton}>
+                <Text style={styles.mainBackButtonText}>←</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Área da Conversa */}
+          <KeyboardAvoidingView 
+            style={styles.conversationContainer} 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
           >
-            {messages.map((message) => (
-              <AnimatedMessage key={message.id} message={message} />
-            ))}
-          </ScrollView>
+            <ScrollView
+              ref={scrollViewRef}
+              contentContainerStyle={styles.chatMessagesContainer}
+              onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+              keyboardShouldPersistTaps="handled"
+            >
+              {messages.map((message) => (
+                <AnimatedMessage key={message.id} message={message} />
+              ))}
+            </ScrollView>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Digite sua ideia..."
-              placeholderTextColor="#999"
-              value={inputText}
-              onChangeText={setInputText}
-            />
-            <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-              <Animated.Text 
-                style={[
-                  styles.sendButtonText,
-                  { transform: [{ scale: sendButtonScale }] }
-                ]}
-              >
-                Enviar
-              </Animated.Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            {/* Barra de Input */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Digite sua ideia..."
+                placeholderTextColor="#999"
+                value={inputText}
+                onChangeText={setInputText}
+              />
+              <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+                <Animated.Text 
+                  style={[
+                    styles.sendButtonText,
+                    { transform: [{ scale: sendButtonScale }] }
+                  ]}
+                >
+                  Enviar
+                </Animated.Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
 
         {/* Modal de Perfil */}
         <Modal
@@ -490,59 +626,6 @@ export default function App() {
             </View>
           </View>
         </Modal>
-
-        {/* Modal de Busca */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={isSearchModalVisible}
-          onRequestClose={() => setIsSearchModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.searchModalContent}>
-              <Text style={styles.searchModalTitle}>Buscar Usuários</Text>
-              
-              <TextInput
-                style={styles.searchModalInput}
-                placeholder="Digite o nome do usuário..."
-                placeholderTextColor="#999"
-                value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                  handleSearch(text);
-                }}
-                autoFocus={true}
-              />
-              
-              <ScrollView style={styles.searchResultsContainer}>
-                {searchResults.map((user) => (
-                  <TouchableOpacity
-                    key={user.username}
-                    style={styles.searchResultItem}
-                    onPress={() => {
-                      startConversation(user.username);
-                      setIsSearchModalVisible(false);
-                    }}
-                  >
-                    <View style={styles.resultAvatar}>
-                      <Text style={styles.resultAvatarText}>
-                        {user.username.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.resultUsername}>{user.username}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setIsSearchModalVisible(false)}
-              >
-                <Text style={styles.closeButtonText}>Fechar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -552,6 +635,341 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
+  },
+  // Menu Lateral
+  sideMenu: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 300,
+    backgroundColor: '#1e1e1e',
+    zIndex: 1000,
+    borderRightWidth: 1,
+    borderRightColor: '#333',
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  closeMenuButton: {
+    padding: 5,
+  },
+  closeMenuText: {
+    color: '#999',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  menuProfile: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  menuProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuAvatarText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  menuProfileInfo: {
+    flex: 1,
+  },
+  menuUsername: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  menuStatus: {
+    color: '#1E90FF',
+    fontSize: 14,
+  },
+  menuSearchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  menuSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuSearchInput: {
+    flex: 1,
+    height: 36,
+    backgroundColor: '#222',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    color: 'white',
+    fontSize: 15,
+  },
+  menuSearchInputActive: {
+    borderColor: '#1E90FF',
+    borderWidth: 1.5,
+  },
+  menuClearSearchButton: {
+    marginLeft: 10,
+    padding: 6,
+  },
+  menuClearSearchText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  menuSearchResults: {
+    marginTop: 10,
+    maxHeight: 150,
+  },
+  menuSearchResultsList: {
+    maxHeight: 150,
+  },
+  menuSearchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  menuResultAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuResultAvatarText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  menuResultUsername: {
+    color: 'white',
+    fontSize: 16,
+  },
+  menuStartChatText: {
+    color: '#1E90FF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 'auto',
+  },
+  menuConversations: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  menuConversationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  menuSectionTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  menuConversationActive: {
+    backgroundColor: '#1E90FF',
+  },
+  menuConversationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuConversationIconText: {
+    fontSize: 20,
+  },
+  menuConversationText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  menuFooter: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#222',
+    backgroundColor: 'transparent',
+  menuUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  menuUserAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuUserAvatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  menuUserInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  menuUserName: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  menuUserSub: {
+    color: '#999',
+    fontSize: 12,
+  },
+  menuSmallLogout: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  menuSmallLogoutText: {
+    color: '#FF6B6B',
+    fontWeight: 'bold',
+  },
+  menuProfileSmall: {
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  menuBrand: {
+    color: '#1E90FF',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  menuStatusSmall: {
+    color: '#8bd0ff',
+    fontSize: 12,
+  },
+  },
+  menuUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#141414',
+  },
+  menuUserAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuUserAvatarText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  menuUserInfo: {
+    flex: 1,
+  },
+  menuUserName: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  menuUserSub: {
+    color: '#999',
+    fontSize: 12,
+  },
+  menuSmallLogout: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  menuSmallLogoutText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  menuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 999,
+  },
+  // Área Principal
+  mainContent: {
+    flex: 1,
+  },
+  mainHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    backgroundColor: '#1e1e1e',
+  },
+  menuToggleButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuToggleBar: {
+    width: 20,
+    height: 2,
+    backgroundColor: '#1E90FF',
+    marginVertical: 2,
+  },
+  mainConversationTitle: {
+    color: '#1E90FF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  mainBackButton: {
+    padding: 5,
+  },
+  mainBackButtonText: {
+    color: '#1E90FF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  conversationContainer: {
+    flex: 1,
+  },
+  chatMessagesContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 15,
+    paddingTop: 15,
   },
   loginContainer: {
     flex: 1,
@@ -589,100 +1007,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  logoutButtonText: {
+  switchText: {
     color: '#1E90FF',
-    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 10,
     fontSize: 14,
-  },
-  searchResultItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  resultAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1E90FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  resultAvatarText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  resultUsername: {
-    color: 'white',
-    fontSize: 16,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  conversationInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  backButton: {
-    marginRight: 10,
-    padding: 5,
-  },
-  backButtonText: {
-    color: '#1E90FF',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  conversationTitle: {
-    color: '#1E90FF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  searchButton: {
-    marginRight: 10,
-    padding: 8,
-  },
-  searchButtonText: {
-    fontSize: 18,
-  },
-  profileButton: {
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1E90FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  chatContainer: {
-    flexGrow: 1,
-    paddingHorizontal: 10,
-    paddingTop: 10,
   },
   bubble: {
     paddingVertical: 12,
@@ -711,7 +1040,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: '#333',
@@ -739,66 +1068,71 @@ const styles = StyleSheet.create({
   },
   // Modal de Perfil
   modalOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 50,
+    zIndex: 2000, // Z-index alto para ficar acima do menu
   },
   modalContent: {
     backgroundColor: '#1e1e1e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     padding: 20,
-    minHeight: 400,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
   },
   profileHeader: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 25,
+    paddingTop: 10,
   },
   largeAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: '#1E90FF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   largeAvatarText: {
     color: 'white',
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: 'bold',
   },
   profileUsername: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   profileSubtitle: {
     color: '#1E90FF',
-    fontSize: 16,
+    fontSize: 18,
   },
   profileOptions: {
-    marginBottom: 20,
+    marginBottom: 25,
   },
   optionButton: {
-    paddingVertical: 15,
+    paddingVertical: 18,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
+    marginBottom: 5,
   },
   optionText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 18,
   },
   logoutOption: {
     borderBottomWidth: 0,
     marginTop: 10,
-  },
-  logoutText: {
-    color: '#FF4444',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   closeButton: {
     backgroundColor: '#333',
@@ -810,33 +1144,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  // Modal de Busca
-  searchModalContent: {
-    backgroundColor: '#1e1e1e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    minHeight: 500,
-  },
-  searchModalTitle: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  searchModalInput: {
-    height: 50,
-    backgroundColor: '#333',
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    color: 'white',
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  searchResultsContainer: {
-    maxHeight: 300,
-    marginBottom: 20,
   },
 });
