@@ -1,9 +1,15 @@
+// dhqdev/flowchatapp/FlowChatApp-4d61cd7e5ca71045ff1813e6a1c1a0d2b6576482/App.js (Atualizado)
+
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+// Lembre-se de manter seu IP local aqui!
 const WEBSOCKET_URL = 'ws://192.168.101.251:8080';
+
+// Vamos adicionar um nome de usuário fixo por enquanto
+const CURRENT_USER = 'David'; 
 
 export default function App() {
   const [inputText, setInputText] = useState('');
@@ -23,9 +29,13 @@ export default function App() {
     ws.current.onerror = (e) => console.error('Erro no WebSocket!', e.message || 'Um erro ocorreu.');
 
     ws.current.onmessage = (e) => {
+      // 1. Receber o objeto JSON do servidor
+      const receivedData = JSON.parse(e.data);
+
       const receivedMessage = {
         id: Math.random(),
-        text: `Eco: ${e.data}`,
+        // 2. Exibir o nome do usuário junto com o texto
+        text: `${receivedData.user}: ${receivedData.text}`,
         user: 'other',
       };
       setMessages(prevMessages => [...prevMessages, receivedMessage]);
@@ -36,9 +46,21 @@ export default function App() {
 
   const handleSendMessage = () => {
     if (inputText.trim().length > 0 && ws.current && ws.current.readyState === WebSocket.OPEN) {
-      const newMessage = { id: Math.random(), text: inputText, user: 'me' };
-      setMessages(prevMessages => [...prevMessages, newMessage]);
-      ws.current.send(inputText);
+      const myMessage = {
+        id: Math.random(),
+        text: inputText,
+        user: 'me' 
+      };
+      setMessages(prevMessages => [...prevMessages, myMessage]);
+      
+      // 3. Criar o objeto de mensagem para enviar ao servidor
+      const messageToSend = {
+        user: CURRENT_USER,
+        text: inputText,
+      };
+
+      // 4. Enviar o objeto como uma string JSON
+      ws.current.send(JSON.stringify(messageToSend));
       setInputText('');
     }
   };
@@ -87,7 +109,6 @@ export default function App() {
   );
 }
 
-// Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
