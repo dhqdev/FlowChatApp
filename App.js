@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import DashboardModal from './DashboardModal';
 import Menu from './Menu';
 
 const API_URL = 'http://192.168.101.251:8080';
@@ -53,6 +54,9 @@ export default function App() {
   // Audio recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState(null);
+
+  // Dashboard modal state
+  const [isDashboardModalVisible, setIsDashboardModalVisible] = useState(false);
 
   // Load conversations from storage when logged in
   useEffect(() => {
@@ -469,9 +473,33 @@ export default function App() {
     }
   };
 
+  const handleSaveDrawing = (uri) => {
+    if (uri && ws.current?.readyState === WebSocket.OPEN) {
+      const messageText = `[Desenho: ${uri}]`;
+      
+      ws.current.send(
+        JSON.stringify({
+          type: 'message',
+          text: messageText,
+          recipient: currentConversation,
+        })
+      );
+
+      // Se for conversa privada, garantir que ela esteja nas conversas recentes
+      if (currentConversation) {
+        setConversations((prev) => (prev.includes(currentConversation) ? prev : [currentConversation, ...prev]));
+      }
+    }
+  };
+
+  const openDashboard = () => {
+    setIsDashboardModalVisible(true);
+    toggleAttachmentPanel(); // Fechar o painel de anexos
+  };
+
   const toggleAttachmentPanel = () => {
     const willBeVisible = !isAttachmentPanelVisible;
-    const toValue = willBeVisible ? 120 : 0; // 120 is the height of the panel
+    const toValue = willBeVisible ? 240 : 0; // Aumentado para 240 para comportar 2 cards
     setIsAttachmentPanelVisible(willBeVisible);
     
     // Animate panel height
@@ -711,12 +739,14 @@ export default function App() {
       outputRange: [0.8, 1.05, 1],
     });
 
-    // Check if message contains an image or audio
+    // Check if message contains an image or audio or drawing
     const imageMatch = message.text.match(/\[Imagem: ([^\]]+)\]/);
     const audioMatch = message.text.match(/\[Áudio: ([^\]]+)\]/);
+    const drawingMatch = message.text.match(/\[Desenho: ([^\]]+)\]/);
     const imageUri = imageMatch ? imageMatch[1] : null;
     const audioUri = audioMatch ? audioMatch[1] : null;
-    const textContent = (imageUri || audioUri) ? message.text.replace(/\[(Imagem|Áudio): [^\]]+\]\n?/, '') : message.text;
+    const drawingUri = drawingMatch ? drawingMatch[1] : null;
+    const textContent = (imageUri || audioUri || drawingUri) ? message.text.replace(/\[(Imagem|Áudio|Desenho): [^\]]+\]\n?/, '') : message.text;
 
     // Efeito especial para mensagens positivas
     const isSpecial = /parabéns|feliz|ótimo|incrível|show/i.test(message.text);
@@ -748,6 +778,20 @@ export default function App() {
         )}
         {audioUri && (
           <AudioMessage audioUri={audioUri} />
+        )}
+        {drawingUri && (
+          <View style={styles.drawingContainer}>
+            <Image
+              source={{ uri: drawingUri }}
+              style={styles.messageDrawing}
+              resizeMode="contain"
+              key={drawingUri}
+            />
+            <View style={styles.drawingBadge}>
+              <Ionicons name="create" size={12} color="#4ECDC4" />
+              <Text style={styles.drawingBadgeText}>Esboço</Text>
+            </View>
+          </View>
         )}
         {textContent && (
           <Text style={styles.bubbleText}>{textContent}</Text>
@@ -1045,6 +1089,14 @@ export default function App() {
                 <Ionicons name="images" size={32} color="#1E90FF" />
                 <Text style={styles.attachmentOptionText}>Galeria</Text>
               </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.attachmentOption}
+                onPress={openDashboard}
+              >
+                <Ionicons name="create" size={32} color="#4ECDC4" />
+                <Text style={styles.attachmentOptionText}>Dashboard</Text>
+              </TouchableOpacity>
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
@@ -1101,6 +1153,13 @@ export default function App() {
             </View>
           </View>
         </Modal>
+
+        {/* Modal de Dashboard */}
+        <DashboardModal
+          visible={isDashboardModalVisible}
+          onClose={() => setIsDashboardModalVisible(false)}
+          onSaveDrawing={handleSaveDrawing}
+        />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -1762,5 +1821,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     marginTop: 2,
+  },
+  drawingContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  messageDrawing: {
+    width: 250,
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: '#1e1e1e',
+  },
+  drawingBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 30, 30, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  drawingBadgeText: {
+    color: '#4ECDC4',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 });
