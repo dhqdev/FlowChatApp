@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Alert, Animated, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -22,13 +23,18 @@ const Menu = ({
   setSearchResults,
   setSearchQuery,
   setCurrentConversation,
+  onNavigateToHome, // Nova prop
 }) => {
   const [avatarPressed, setAvatarPressed] = useState(false);
   return (
     <Animated.View style={[styles.sideMenu, { transform: [{ translateX: menuSlideAnim }] }]}>
       <View style={styles.menuHeader}>
+        <View style={styles.menuHeaderContent}>
+          <Text style={styles.menuBrandTitle}>FlowChat</Text>
+          <Text style={styles.menuBrandSubtitle}>Suas conversas</Text>
+        </View>
         <TouchableOpacity onPress={closeMenu} style={styles.closeMenuButton}>
-          <Text style={styles.closeMenuText}>✕</Text>
+          <Ionicons name="close" size={24} color="#999" />
         </TouchableOpacity>
       </View>
 
@@ -111,12 +117,31 @@ const Menu = ({
       {/* Conversas */}
       <View style={styles.menuConversations}>
         <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Botão Home */}
+          {onNavigateToHome && (
+            <TouchableOpacity
+              style={styles.menuConversationItem}
+              onPress={() => {
+                onNavigateToHome();
+                closeMenu();
+              }}
+            >
+              <View style={styles.menuConversationIcon}>
+                <Text style={styles.menuConversationIconText}>🏠</Text>
+              </View>
+              <Text style={styles.menuConversationText}>Home</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[
               styles.menuConversationItem,
               !currentConversation && styles.menuConversationActive
             ]}
             onPress={() => {
+              if (startConversation) {
+                startConversation(null); // null = chat global
+              }
               setCurrentConversation(null);
               closeMenu();
             }}
@@ -136,6 +161,9 @@ const Menu = ({
                 currentConversation === user && styles.menuConversationActive
               ]}
               onPress={() => {
+                if (startConversation) {
+                  startConversation(user);
+                }
                 setCurrentConversation(user);
                 closeMenu();
               }}
@@ -192,27 +220,50 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     width: 300,
-    backgroundColor: 'rgba(30, 30, 30, 0.8)',
+    backgroundColor: '#1a1a1a',
     zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
   menuHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  menuHeaderContent: {
+    flex: 1,
+  },
+  menuBrandTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1E90FF',
+    marginBottom: 2,
+  },
+  menuBrandSubtitle: {
+    fontSize: 12,
+    color: '#999',
   },
   closeMenuButton: {
     padding: 5,
+    marginLeft: 'auto',
   },
   closeMenuText: {
     color: '#999',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   menuSearchContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 12,
+    backgroundColor: '#141414',
   },
   menuSearchBar: {
     flexDirection: 'row',
@@ -220,17 +271,18 @@ const styles = StyleSheet.create({
   },
   menuSearchInput: {
     flex: 1,
-    height: 40,
+    height: 38,
     backgroundColor: '#2a2a2a',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: '#333',
     color: 'white',
-    fontSize: 15,
+    fontSize: 14,
     paddingHorizontal: 15,
   },
   menuSearchInputActive: {
     borderColor: '#1E90FF',
+    backgroundColor: '#1e2530',
   },
   menuClearSearchButton: {
     marginLeft: 10,
@@ -281,61 +333,66 @@ const styles = StyleSheet.create({
   },
   menuConversations: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   menuConversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 15,
-    borderRadius: 15,
-    marginBottom: 8,
-    backgroundColor: '#1a1a1a',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: 'transparent',
   },
   menuConversationActive: {
     backgroundColor: '#1E90FF',
   },
   menuConversationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#444',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#2a2a2a',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: 12,
   },
   menuConversationIconText: {
     fontSize: 20,
   },
   menuConversationText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: '500',
   },
   menuFooter: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'transparent',
+    paddingVertical: 16,
+    backgroundColor: '#141414',
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
   },
   menuUserCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: '#141414',
+    backgroundColor: '#1a1a1a',
   },
   menuUserAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#1E90FF',
   },
   menuUserAvatarText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   menuUserInfo: {
@@ -343,20 +400,22 @@ const styles = StyleSheet.create({
   },
   menuUserName: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   menuUserSub: {
-    color: '#999',
-    fontSize: 10,
+    color: '#4ECDC4',
+    fontSize: 11,
   },
   menuSmallLogout: {
     paddingHorizontal: 10,
     paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
   },
   menuSmallLogoutText: {
     color: '#FF6B6B',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
   },
 });

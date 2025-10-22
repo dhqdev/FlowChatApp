@@ -1,10 +1,16 @@
+import { registerRootComponent } from 'expo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import App from './App';
+import { ThemeProvider } from './ThemeContext';
 
-export default function Main() {
+function Main() {
   return (
     <SafeAreaProvider>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
+
+export default registerRootComponent(Main);

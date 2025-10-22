@@ -72,7 +72,7 @@ app.get('/messages', (req, res) => {
   
   console.log('Parâmetros recebidos:', { conversation, user });
   
-  let query = 'SELECT sender, recipient, text FROM messages WHERE ';
+  let query = 'SELECT id, sender, recipient, text FROM messages WHERE ';
   let params = [];
   
   if (conversation) {
@@ -139,35 +139,85 @@ wss.on('connection', (ws) => {
           return;
         }
         console.log('Mensagem salva com sucesso, ID:', this.lastID);
-      });
+        
+        // Preparar mensagem com sender, recipient e ID para reenviar
+        const messageWithMeta = {
+          type: 'message',
+          id: this.lastID, // ID único da mensagem do banco de dados
+          text: message.text,
+          sender: ws.username,
+          recipient: message.recipient,
+        };
 
-      // Preparar mensagem com sender e recipient para reenviar
-      const messageWithMeta = {
-        type: 'message',
-        text: message.text,
+        console.log('Enviando mensagem para:', message.recipient ? 'conversa privada' : 'chat global');
+
+        // Se é conversa privada, enviar apenas para o destinatário
+        if (message.recipient) {
+          wss.clients.forEach((client) => {
+            if (client.username === message.recipient || client.username === ws.username) {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(messageWithMeta));
+              }
+            }
+          });
+        } else {
+          // Chat global: enviar para todos, incluindo o próprio usuário
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify(messageWithMeta));
+            }
+          });
+        }
+      });
+    }
+
+    // Evento de digitação
+    if (message.type === 'typing') {
+      console.log('Evento de digitação:', { user: ws.username, isTyping: message.isTyping });
+      
+      const typingEvent = {
+        type: 'typing',
         sender: ws.username,
+        isTyping: message.isTyping,
         recipient: message.recipient,
       };
-
-      console.log('Enviando mensagem para:', message.recipient ? 'conversa privada' : 'chat global');
 
       // Se é conversa privada, enviar apenas para o destinatário
       if (message.recipient) {
         wss.clients.forEach((client) => {
-          if (client.username === message.recipient || client.username === ws.username) {
+          if (client.username === message.recipient) {
             if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify(messageWithMeta));
+              client.send(JSON.stringify(typingEvent));
             }
           }
         });
       } else {
-        // Chat global: enviar para todos, incluindo o próprio usuário
+        // Chat global: enviar para todos exceto o remetente
         wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(messageWithMeta));
+          if (client.username !== ws.username && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(typingEvent));
           }
         });
       }
+    }
+
+    // Evento de reação
+    if (message.type === 'reaction') {
+      console.log('Evento de reação:', { user: ws.username, messageId: message.messageId, emoji: message.emoji });
+      
+      const reactionEvent = {
+        type: 'reaction',
+        messageId: message.messageId,
+        emoji: message.emoji,
+        user: ws.username,
+      };
+
+      // Enviar para todos os clientes
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(reactionEvent));
+        }
+      });
     }
   });
 
